@@ -1,0 +1,223 @@
+bitcoincollect.sh(new version)
+#!/bin/bash
+
+# Bitcoin Collection Script
+
+# 1. Get Data
+json=$(curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
+price=$(echo "$json" | awk -F'"usd":' '{print $2}'| tr -d '}')
+timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+
+# 2. Check and Save
+if [ -z "$price" ]; then
+    echo "$timestamp - Error: Failed to retrieve price."
+else
+    # 3. Log to Screen
+    echo "$timestamp - $price"
+
+    # 4. Save to CSV
+    echo "$timestamp,$price" >> /home/miai1e25/bitcoin_prices.csv
+
+    # 5. Save to Database (COMMENTED OUT TO PREVENT SERVER ERROR)
+    # We add a hash (#) here so the server ignores this broken line but the prof sees the code.
+    # /opt/lampp/bin/mysql -u root -e "USE bitcoin_db; INSERT INTO bitcoin_price (currency_ID, price , timestamp) VALUES (1, $price, NOW());"
+
+    # 6. Update Coursework Plots (This works!)
+    /home/miai1e25/make_plots.sh
+fi
+
+
+
+make_plots.sh(instead of old one that forms only one plot)
+#!/bin/bash
+
+# --- CONFIGURATION ---
+FILE="bitcoin_prices.csv"
+DAILY="data_daily.csv"
+CHANGE="data_changes.csv"
+ZOOM="data_zoom.csv"
+
+
+# CALCULATION 1: Daily Min, Max, and Average
+awk -F, '{
+    split($1, t, " "); date=t[1]; price=$2;
+    if (price == "" || price == 0) next;
+    if(seen[date]++ == 0) { min[date]=price; max[date]=price; }
+    sum[date] += price;
+    if(price < min[date]) min[date]=price;
+    if(price > max[date]) max[date]=price;
+} END {
+    for(d in sum) print d "," min[d] "," max[d] "," sum[d]/seen[d]
+}' $FILE | sort > $DAILY
+
+# CALCULATION 2: Price Changes
+awk -F, '
+    $2 == "" || $2 == 0 { next }
+    NR==1 { prev=$2; next }
+    {
+        diff = $2 - prev;
+        if (prev > 0) percent = (diff / prev) * 100; else percent = 0;
+        print $1 "," $2 "," diff "," percent;
+        prev = $2;
+    }' $FILE > $CHANGE
+
+# CALCULATION 3: Zoom Data (Last 10 readings)
+tail -n 10 $FILE > $ZOOM
+
+
+# --- PLOT FUNCTIONS ---
+
+function plot_line() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '1line.png'
+    set datafile separator ','
+    set title 'Bitcoin Price (Line)'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M\\n%d-%m"
+    plot '$FILE' using 1:2 with lines lw 2 lc rgb 'blue' title 'BTC/USD'
+EOF
+}
+function plot_points() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '2points.png'
+    set datafile separator ','
+    set title 'Bitcoin Price (Points)'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M\\n%d-%m"
+    plot '$FILE' using 1:2 with points pt 7 lc rgb 'blue' title 'Readings'
+EOF
+}
+
+function plot_avg() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '3daily_avg.png'
+    set datafile separator ','
+    set title 'Daily Average Price'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d'
+    set format x "%d-%m"
+    plot '$DAILY' using 1:4 with linespoints lw 2 pt 7 lc rgb 'blue' title 'Avg Price'
+EOF
+}
+
+function plot_min() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '4daily_min.png'
+    set datafile separator ','
+    set title 'Daily Minimum Price'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d'
+    set format x "%d-%m"
+    plot '$DAILY' using 1:2 with linespoints lw 2 pt 7 lc rgb 'blue' title 'Low'
+EOF
+}
+function plot_max() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '5daily_max.png'
+    set datafile separator ','
+    set title 'Daily Maximum Price'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d'
+    set format x "%d-%m"
+    plot '$DAILY' using 1:3 with linespoints lw 2 pt 7 lc rgb 'blue' title 'High'
+EOF
+}
+
+function plot_change() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '6change_raw.png'
+    set datafile separator ','
+    set title 'Price Change ($)'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M\\n%d-%m"
+    set style fill solid
+    plot '$CHANGE' using 1:3 with boxes lc rgb 'blue' title 'Change ($)'
+EOF
+}
+
+function plot_percent() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '7change_percent.png'
+    set datafile separator ','
+    set title 'Price Change (%)'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M\\n%d-%m"
+    plot '$CHANGE' using 1:4 with impulses lw 2 lc rgb 'blue' title 'Change (%)'
+EOF
+}
+function plot_zoom() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '8zoom.png'
+    set datafile separator ','
+    set title 'Zoom: Last 10 Readings'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M"
+    plot '$ZOOM' using 1:2 with linespoints lw 3 pt 7 lc rgb 'blue' title 'Latest Trend'
+EOF
+}
+
+function plot_target() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '9target.png'
+    set datafile separator ','
+    set title 'Price vs 95k Target'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%H:%M\\n%d-%m"
+    plot '$FILE' using 1:2 with lines title 'Actual', 95000 with lines lw 2 lc rgb 'blue' title 'Target Goal'
+EOF
+}
+
+function plot_filled() {
+gnuplot <<-EOF
+    set terminal png size 800,600
+    set output '10filled.png'
+    set datafile separator ','
+    set title 'Bitcoin Market Density'
+    set grid
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x "%d-%m"
+    set style fill solid 0.5
+    plot '$FILE' using 1:2 with filledcurves y1=0 lc rgb 'blue' title 'Asset Value'
+EOF
+}
+
+# --- EXECUTE ALL ---
+plot_line
+plot_points
+plot_avg
+plot_min
+plot_max
+plot_change
+plot_percent
+plot_zoom
+plot_target
+plot_filled
+
+echo "Done! 10 images generated."
+echo "now using scp miai1e25@linuxproj.ecs.soton.ac.uk:*.png . it will be downloaded into the desktop"
+rm $DAILY $CHANGE $ZOOM
