@@ -1,28 +1,20 @@
 bitcoincollect.sh(new version)
 #!/bin/bash
 
-# Bitcoin Collection Script
-
-# 1. Get Data
 json=$(curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
 price=$(echo "$json" | awk -F'"usd":' '{print $2}'| tr -d '}')
 timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 2. Check and Save
+
 if [ -z "$price" ]; then
     echo "$timestamp - Error: Failed to retrieve price."
 else
-    # 3. Log to Screen
     echo "$timestamp - $price"
 
-    # 4. Save to CSV
     echo "$timestamp,$price" >> /home/miai1e25/bitcoin_prices.csv
 
-    # 5. Save to Database (COMMENTED OUT TO PREVENT SERVER ERROR)
-    # We add a hash (#) here so the server ignores this broken line but the prof sees the code.
-    # /opt/lampp/bin/mysql -u root -e "USE bitcoin_db; INSERT INTO bitcoin_price (currency_ID, price , timestamp) VALUES (1, $price, NOW());"
+    # /opt/lampp/bin/mysql -u root -e "USE bitcoin_db; INSERT INTO bitcoin_price (currency_ID, price , timestamp) VALUES (1, $price, NOW());"(still trying to connect data to the database)
 
-    # 6. Update Coursework Plots (This works!)
     /home/miai1e25/make_plots.sh
 fi
 
@@ -31,7 +23,6 @@ fi
 make_plots.sh(instead of old one that forms only one plot)
 #!/bin/bash
 
-# --- CONFIGURATION ---
 FILE="bitcoin_prices.csv"
 DAILY="data_daily.csv"
 CHANGE="data_changes.csv"
@@ -65,14 +56,14 @@ awk -F, '
 tail -n 10 $FILE > $ZOOM
 
 
-# --- PLOT FUNCTIONS ---
-
 function plot_line() {
 gnuplot <<-EOF
     set terminal png size 800,600
     set output '1line.png'
     set datafile separator ','
     set title 'Bitcoin Price (Line)'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
@@ -86,6 +77,8 @@ gnuplot <<-EOF
     set output '2points.png'
     set datafile separator ','
     set title 'Bitcoin Price (Points)'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
@@ -100,6 +93,8 @@ gnuplot <<-EOF
     set output '3daily_avg.png'
     set datafile separator ','
     set title 'Daily Average Price'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d'
@@ -114,6 +109,8 @@ gnuplot <<-EOF
     set output '4daily_min.png'
     set datafile separator ','
     set title 'Daily Minimum Price'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d'
@@ -127,6 +124,8 @@ gnuplot <<-EOF
     set output '5daily_max.png'
     set datafile separator ','
     set title 'Daily Maximum Price'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d'
@@ -141,6 +140,8 @@ gnuplot <<-EOF
     set output '6change_raw.png'
     set datafile separator ','
     set title 'Price Change ($)'
+    set xlabel "date/time"
+    set ylabel "price change"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
@@ -156,6 +157,8 @@ gnuplot <<-EOF
     set output '7change_percent.png'
     set datafile separator ','
     set title 'Price Change (%)'
+    set xlabel "date/time"
+    set ylabel "%change"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
@@ -169,6 +172,8 @@ gnuplot <<-EOF
     set output '8zoom.png'
     set datafile separator ','
     set title 'Zoom: Last 10 Readings'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
@@ -183,11 +188,13 @@ gnuplot <<-EOF
     set output '9target.png'
     set datafile separator ','
     set title 'Price vs 95k Target'
+    set xlabel "date/time"
+    set ylabel "price"
     set grid
     set xdata time
     set timefmt '%Y-%m-%d %H:%M:%S'
     set format x "%H:%M\\n%d-%m"
-    plot '$FILE' using 1:2 with lines title 'Actual', 95000 with lines lw 2 lc rgb 'blue' title 'Target Goal'
+    plot '$FILE' using 1:2 with lines title 'Actual' lc rgb 'red', 95000 with lines lw 2 lc rgb 'blue' title 'Target Goal'
 EOF
 }
 
@@ -199,6 +206,8 @@ gnuplot <<-EOF
     set title 'Bitcoin Market Density'
     set grid
     set xdata time
+    set xlabel "date/time"
+    set ylabel "price"
     set timefmt '%Y-%m-%d %H:%M:%S'
     set format x "%d-%m"
     set style fill solid 0.5
@@ -206,7 +215,6 @@ gnuplot <<-EOF
 EOF
 }
 
-# --- EXECUTE ALL ---
 plot_line
 plot_points
 plot_avg
