@@ -19,4 +19,3 @@ echo "$timestamp,$price" >> bitcoin_prices.csv
 gnuplot /home/miai1e25/plot_bitcoin.gp
 
 fi
-[miai1e25@linuxproj ~]$
