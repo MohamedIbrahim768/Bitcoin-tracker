@@ -1,0 +1,2 @@
+[miai1e25@linuxproj ~]$ crontab -l
+0 * * * * /home/miai1e25/bitcoincollect.sh
